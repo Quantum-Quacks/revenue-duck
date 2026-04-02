@@ -1,5 +1,11 @@
 {
   "rewrites": [
     { "source": "/", "destination": "/api/notify" }
+  ],
+  "crons": [
+    {
+      "path": "/api/sales-report",
+      "schedule": "0 19 * * *"
+    }
   ]
 }
