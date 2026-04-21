@@ -14,14 +14,16 @@ const CRON_SECRET = process.env.CRON_SECRET?.trim();
 
 // Map bundle IDs to friendly app names
 const APP_NAMES = {
-  "es.quantumquacks.worldmarks": "Worldmarks",
+  "es.quantumquacks.kaeru": "Kaeru",
   "es.quantumquacks.kotomaji": "Kotomaji",
+  "es.quantumquacks.sweepsheep": "SweepSheep",
+  "es.quantumquacks.worldmarks": "Worldmarks",
   "es.quantumquacks.dgt-a2-testmaster": "DGT A2 TestMaster",
-  // Add more apps here
 };
 
 // Product Type Identifiers
 const PAID_APP_TYPES = new Set(["1", "1F", "1T"]);
+const FREE_APP_TYPES = new Set(["6", "7"]);  // 6=Free app, 7=Redownload
 const IAP_TYPES = new Set(["IA1", "IA9", "IAY"]);
 
 // --- JWT generation for App Store Connect API ---
@@ -162,7 +164,7 @@ function buildSalesMessage(rows, reportDate) {
   const salesRows = rows.filter((r) => {
     const units = parseInt(r["Units"], 10);
     const type = r["Product Type Identifier"];
-    return units > 0 && (PAID_APP_TYPES.has(type) || IAP_TYPES.has(type));
+    return units > 0 && (PAID_APP_TYPES.has(type) || FREE_APP_TYPES.has(type) || IAP_TYPES.has(type));
   });
 
   if (salesRows.length === 0) {
@@ -177,6 +179,7 @@ function buildSalesMessage(rows, reportDate) {
 
   // Group by category and product
   const paidApps = {}; // key: title, value: { units, proceeds, currency }
+  const freeApps = {}; // key: title, value: { units, proceeds, currency }
   const iapProducts = {}; // key: SKU/productId, value: { units, proceeds, currency }
 
   for (const row of salesRows) {
@@ -195,6 +198,14 @@ function buildSalesMessage(rows, reportDate) {
       }
       paidApps[appTitle].units += units;
       paidApps[appTitle].proceeds += proceeds * units;
+    } else if (FREE_APP_TYPES.has(type)) {
+      // Free app downloads/redownloads
+      const appTitle = APP_NAMES[sku] || title;
+      if (!freeApps[appTitle]) {
+        freeApps[appTitle] = { units: 0, proceeds: 0, currency };
+      }
+      freeApps[appTitle].units += units;
+      freeApps[appTitle].proceeds += proceeds * units;
     } else if (IAP_TYPES.has(type)) {
       // Use SKU as identifier for IAP
       const iapName = APP_NAMES[sku] || sku;
@@ -225,6 +236,18 @@ function buildSalesMessage(rows, reportDate) {
       totalUnits += data.units;
       totalProceeds += data.proceeds;
       totalCurrency = data.currency;
+    }
+  }
+
+  // Free apps section
+  const freeEntries = Object.entries(freeApps);
+  if (freeEntries.length > 0) {
+    lines.push("");
+    lines.push("📥 <b>Apps gratuitas:</b>");
+    for (const [name, data] of freeEntries) {
+      const unitLabel = data.units === 1 ? "descarga" : "descargas";
+      lines.push(`  • ${name} — ${data.units} ${unitLabel}`);
+      totalUnits += data.units;
     }
   }
 
